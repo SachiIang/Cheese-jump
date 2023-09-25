@@ -1,0 +1,292 @@
+<!DOCTYPE html><html><head><title>Less Basic Doodle Jump</title><meta charset="UTF-8"><style>
+    html,
+    body {
+        height: 100%;
+        margin: 0;
+        background-color: black;
+    }
+
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    canvas {
+        border: 6px solid #757575;
+        background-color: #414141;
+    }
+</style></head><body><canvas width="375" height="667" id="game"></canvas><script>
+    const yes = new URLSearchParams(window.location.search);
+    var score=yes.get('s');
+    var reload = 0;
+    const canvas = document.getElementById('game');
+    const context = canvas.getContext('2d');
+
+    // width and height of each platform and where platforms start
+    const platformWidth = 65;
+    const platformHeight = 20;
+    const platformStart = canvas.height - 50;
+
+    // player physics
+    const maxspeed = 3.5;
+    const gravity = 0.33;
+    const drag = 0.15;
+    const bounceVelocity = -12.5;
+    var grav = true;
+    var lava = {
+        enabled: false,
+        height: 100,
+        resetheight: 100
+    }
+
+    // player graphics
+    var playerx = 40;
+    var playery = 60;
+    const cheese_colors = ['', '#e0ad02', '#fcff45', '#000000']
+    const draw_here = [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0, 0, 0, 0, 3, 3, 3, 3, 0, 0,
+        0, 0, 3, 3, 2, 2, 2, 2, 3, 0,
+        0, 3, 2, 2, 2, 2, 2, 3, 3, 3,
+        0, 3, 2, 2, 2, 2, 3, 1, 1, 3,
+        3, 2, 2, 2, 2, 3, 1, 1, 1, 3,
+        3, 2, 2, 2, 2, 2, 3, 1, 3, 0,
+        3, 3, 2, 2, 2, 2, 2, 3, 0, 0,
+        3, 3, 2, 2, 2, 2, 2, 2, 3, 0,
+        3, 2, 3, 3, 2, 2, 2, 2, 3, 0,
+        3, 2, 2, 2, 3, 3, 3, 3, 3, 0,
+        0, 3, 2, 2, 2, 2, 2, 2, 3, 0,
+        0, 0, 3, 3, 2, 2, 2, 2, 3, 0,
+        0, 0, 0, 0, 3, 3, 3, 3, 0, 0
+    ]
+
+//▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮//
+//                                                                                                              //
+//                              Do not edit past here unless you know what you are doing                        //
+//                                                                                                              //
+//▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮▮//
+
+    function draw_the_player() {
+        let col = 0;
+        let row = 0;
+        let both = 0;
+        while (both < draw_here.length){
+            if (cheese_colors[draw_here[both]] != '') {
+                context.fillStyle = cheese_colors[draw_here[both]];
+                context.fillRect(
+                    doodle.x + doodle.width / 10 * col,
+                    doodle.y + doodle.height / 15 * row,
+                    doodle.width / 10 + 1,
+                    doodle.height / 15 + 1
+                );
+            }
+            both++;
+            col++;
+            if (col > 9) {
+                col-=10
+                row++
+            }
+        }
+    }
+
+    // minimum and maximum vertical space between each platform
+    let minPlatformSpace = 15;
+    let maxPlatformSpace = 20;
+    // information about each platform. the first platform starts in the
+    // bottom middle of the screen
+    let platforms = [{
+        x: canvas.width / 2 - platformWidth / 2,
+        y: platformStart
+    }];
+
+    // get a random number between the min (inclusive) and max (exclusive)
+    function random(min, max) {
+        return Math.random() * (max - min) + min;
+    }
+    const bread = [82,69,86,69,82,83,69];
+    var beef = 0;
+    var reverse = false;
+    
+    // the doodle jumper info
+    const doodle = {
+        width: playerx,
+        height: playery,
+        x: canvas.width / 2 - playerx / 2,
+        y: canvas.height - lava.height - playery - platformHeight,
+        // velocity
+        dx: 0,
+        dy: 0
+    };
+
+    //debug set score
+    maxPlatformSpace = yes.get('s') * 0.25 + 20;
+    minPlatformSpace = yes.get('s') * 0.25 + 15;
+
+    platforms.push({
+        x: canvas.width / 2 - platformWidth / 2,
+        y: canvas.height - lava.height - platformHeight
+    })
+
+    // keep track of player direction and actions
+    let playerDir = 0;
+    let keydown = false;
+    let prevDoodleY = doodle.y;
+
+    // game loop
+    function loop() {
+        requestAnimationFrame(loop);
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        // apply gravity to doodle
+        if (grav) doodle.dy += gravity;
+        // if doodle reaches the middle of the screen, move the platforms down
+        // instead of doodle up to make it look like doodle is going up
+        if (doodle.y < canvas.height / 2 && doodle.dy < 0) {
+            platforms.forEach(function(platform) {
+                platform.y += -doodle.dy;
+            });
+            while (platforms[platforms.length - 1].y > 0) {
+                if(reverse){score--}else{score++;}
+                // cap max space
+                minPlatformSpace = Math.min(minPlatformSpace, canvas.height / 2 - doodle.height * 2 - 5)
+                maxPlatformSpace = Math.min(maxPlatformSpace, canvas.height / 2 - doodle.height * 2 - 5)
+
+                // add more platforms to the top of the screen as doodle moves up
+                platforms.push({
+                    x: random(25, canvas.width - 25 - platformWidth),
+                    //canvas.width / 2 - platformWidth / 2,//
+                    y: platforms[platforms.length - 1].y - (platformHeight + random(minPlatformSpace, maxPlatformSpace))
+                })
+                // add a bit to the min/max platform space as the player goes up
+                minPlatformSpace += 0.25;
+                maxPlatformSpace += 0.25;
+            }
+        } else {
+            doodle.y += doodle.dy;
+        }
+
+        // only apply drag to horizontal movement if key is not pressed
+        if (!keydown) {
+            if (playerDir < 0) {
+                doodle.dx += drag;
+                // don't let dx go above 0
+                if (doodle.dx > 0) {
+                    doodle.dx = 0;
+                    playerDir = 0;
+                }
+            } else if (playerDir > 0) {
+                doodle.dx -= drag;
+                if (doodle.dx < 0) {
+                    doodle.dx = 0;
+                    playerDir = 0;
+                }
+            }
+        }
+        doodle.x += doodle.dx;
+
+        // make doodle wrap the screen
+        if (doodle.x + doodle.width < 0) {
+            doodle.x = canvas.width;
+        } else if (doodle.x > canvas.width) {
+            doodle.x = -doodle.width;
+        }
+
+        // draw platforms
+        context.fillStyle = '#eb4034'; //red bottom block
+        if(reverse&score<0)  {context.fillStyle='#41d953';lava.enabled=false} //green
+        if(reverse&score<-315) {context.fillStyle='#41d9d4';lava.enabled=false} //blue
+        if(reverse&score<-700) {context.fillStyle='#b886e3';lava.enabled=true} //purple
+        if(reverse&score<-1500){context.fillStyle='#edeb79';lava.enabled=false} //gold
+        if(reverse&score<-1850){context.fillStyle='#db7995';lava.enabled=true } //pink
+        if(reverse&score<-2200){context.fillStyle='#ab6565';lava.enabled=false} //brownish-red
+        if(reverse&score<-2550){context.fillStyle='#edbc80';lava.height=(score-2550+lava.resetheight)*0.01;lava.enabled=true } //peach
+        if(reverse&score<-2900){context.fillStyle='#636262';lava.enabled=false} //dark gray
+        if(reverse&score<-3250){context.fillStyle='#707070';lava.enabled=false} //background gray
+        if(reverse&score<-3600){context.fillStyle='#414041';lava.height=(score-3600+lava.resetheight)*0.025;lava.enabled=true } //background gray
+        platforms.forEach(function(platform) {
+            context.fillRect(platform.x, platform.y, platformWidth, platformHeight);
+            if(score>=0)  {context.fillStyle='#41d953';lava.enabled=false} //green
+            if(score>315) {context.fillStyle='#41d9d4';lava.enabled=false} //blue
+            if(score>700) {context.fillStyle='#b886e3';lava.enabled=true } //purple
+            if(score>1500){context.fillStyle='#edeb79';lava.enabled=false} //gold
+            if(score>1850){context.fillStyle='#db7995';lava.enabled=true } //pink
+            if(score>2200){context.fillStyle='#ab6565';lava.enabled=false} //brownish-red
+            if(score>2550){context.fillStyle='#edbc80';lava.height+=0.01;lava.enabled=true } //peach
+            if(score>2900){context.fillStyle='#636262';lava.enabled=false} //dark gray
+            if(score>3250){context.fillStyle='#707070';lava.enabled=false} //background gray
+            if(score>3600){context.fillStyle='#404040';lava.height+=0.025;lava.enabled=true } //background gray
+            if(reverse){context.fillStyle='#eb4034';}
+
+            // make doodle jump if it collides with a platform from above
+            if (
+                // doodle is falling
+                doodle.dy > 0 &&
+                // doodle was previously above the platform
+                prevDoodleY + doodle.height <= platform.y &&
+                // doodle collides with platform
+                // (Axis Aligned Bounding Box [AABB] collision check)
+                doodle.x < platform.x + platformWidth && doodle.x + doodle.width > platform.x && doodle.y < platform.y + platformHeight && doodle.y + doodle.height > platform.y
+            ){
+                // reset doodle position so it's on top of the platform
+                doodle.y = platform.y - doodle.height;
+                doodle.dy = bounceVelocity;
+            }
+        });
+
+        //lava
+        if (lava.enabled) {
+            context.fillStyle='#eb4034'
+            context.fillRect(0, canvas.height - lava.height, canvas.width, lava.height);
+        }
+        if (doodle.y >= canvas.height - lava.height - doodle.height & lava.enabled) {
+            doodledie();
+        }
+
+        // draw doodle
+        draw_the_player();
+
+        // doodle die
+        function finalscore () {
+            if (score>3300){return 'cheater'} else return score
+        }
+        function doodledie () {
+            reload = 1;
+            var scoredec = confirm("Your score is: " + finalscore() + `
+Do you wish to retry?
+We will restart anyway. ;)`);
+                window.location.reload(true);
+        }
+        if (doodle.y > canvas.height && reload === 0) {
+            doodledie();
+        };
+
+        prevDoodleY = doodle.y;
+        // remove any platforms that have gone offscreen
+        platforms = platforms.filter(function(platform) {
+            return platform.y < canvas.height;
+        })
+    }
+
+    // listen to keyboard events to move doodle
+    document.addEventListener('keydown', function(e) {
+        // A key
+        if (((e.which === 65 || e.which === 37) & !reverse) || ((e.which === 68 || e.which === 39) & reverse)) {
+            keydown = true;
+            playerDir = -1;
+            doodle.dx = -maxspeed;
+        }
+        // D key
+        else if (((e.which === 65 || e.which === 37) & reverse) || ((e.which === 68 || e.which === 39) & !reverse)) {
+            keydown = true;
+            playerDir = 1;
+            doodle.dx = maxspeed;
+        }
+        if(e.which==bread[beef]){beef++;if(beef>=7){reverse++;score-=2*score}}
+    });
+    document.addEventListener('keyup', function(e) {
+        keydown = false;
+    });
+    // start the game
+    requestAnimationFrame(loop);
+</script></body></html>.
